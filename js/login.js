@@ -12,7 +12,7 @@ let _madvarer;
 let ExpireDate;
 // ========== FIREBASE AUTH ========== //
 // Listen on authentication state change
-firebase.auth().onAuthStateChanged(function(user) {
+firebase.auth().onAuthStateChanged(function (user) {
   if (user) { // if user exists and is authenticated
     userAuthenticated(user);
   } else { // if user is not logged in
@@ -24,6 +24,7 @@ function userAuthenticated(user) {
   //appendUserData(user);
   _currentUser = user;
   hideTabbar(false);
+  console.log("Hola")
   init();
   _spaService.showPage("fridge");
   //showLoader(false);
@@ -62,7 +63,7 @@ function hideTabbar(hide) {
 }
 
 // Gør det muligt for HTML DOM'en at læse funktionen logout()
-window.logout = function() {
+window.logout = function () {
   logout();
 }
 
@@ -108,14 +109,14 @@ function init() {
   // init user data and favourite food
   _userRef.doc(_currentUser.uid).onSnapshot({
     includeMetadataChanges: true
-  }, function(userData) {
-    if (!userData.metadata.hasPendingWrites && userData.data()) {
+  }, function (userData) {
+    if (!userData.metadata.hasPendingWrites) {
       _currentUser = {
         ...firebase.auth().currentUser,
         ...userData.data()
       }; //concating two objects: authUser object and userData objec from the db
       appendUserData();
-      appendFridge(_currentUser.Fridge);
+      initFridge();
       if (_madvarer) {
         appendMadvarer(_madvarer); // refresh movies when user data changes
       }
@@ -124,9 +125,9 @@ function init() {
   });
 
   // init alt mad
-  _madRef.onSnapshot(function(snapshotData) {
+  _madRef.onSnapshot(function (snapshotData) {
     _madvarer = [];
-    snapshotData.forEach(function(doc) {
+    snapshotData.forEach(function (doc) {
       let mad = doc.data();
       mad.id = doc.id;
       _madvarer.push(mad);
@@ -157,8 +158,8 @@ function appendMadvarer(madvarer) {
   document.querySelector('#add-menu-forslag').innerHTML = htmlTemplate;
 }
 
-window.setExpireDate = function (dato){
- ExpireDate = dato
+window.setExpireDate = function (dato) {
+  ExpireDate = dato
 }
 
 // Tilføj-knappen under add-menuen bliver lavet her og srkevet ind i 'appendMadvarer' backtick-string. onclick der kører funktionen "addToFridge" og hvis Fridge eller undeholder det mad ID skal den ændre style og sige "tilføjet"
@@ -173,7 +174,7 @@ function generateFavFridgeButton(madId) {
   return btnTemplate;
 }
 
-window.addToFridge = function(madId) {
+window.addToFridge = function (madId) {
   addToFridge(madId);
 }
 
@@ -182,30 +183,23 @@ function addToFridge(madId) {
   //showLoader(true);
 
   // Array med madID til Firestore Database
-  _userRef.doc(_currentUser.uid).set({
-    Fridge: firebase.firestore.FieldValue.arrayUnion({madId,ExpireDate})
-  }, {
-    merge: true
+  _userRef.doc(_currentUser.uid).collection('fridge').add({
+    madId,
+    ExpireDate
   });
 }
 
 
-window.addedToFridge = function (madId, ExpireDate) {
-  console.log(madId, ExpireDate)
-  addedToFridge(madId, ExpireDate);
-  
+window.removeFromFridge = function (id) {
+  removeFromFridge(id);
 }
 
-function addedToFridge(madId, ExpireDate) {
-  //showLoader(true);
-  console.log(madId, ExpireDate)
-  _userRef.doc(_currentUser.uid).update({
-    Fridge: firebase.firestore.FieldValue.arrayRemove({madId, ExpireDate})
-  });
+function removeFromFridge(id) {
+  _userRef.doc(_currentUser.uid).collection('fridge/').doc(id).delete();
 }
 
 // onclick funktion på save-knappen under profil siden.
-window.updateUser = function() {
+window.updateUser = function () {
   updateUser();
 }
 
@@ -227,42 +221,40 @@ function updateUser() {
   });
 }
 
-async function appendFridge(FridgeIds = []) {
-  let htmlTemplate = "";
-  if (FridgeIds.length === 0) {
-    htmlTemplate = "<br><br><br><br><p>Tilføj ting til dit køleskab</p> <img src='images/favicon.png'>";
-  } else {
-    for (let mad of FridgeIds) {
-      await _madRef.doc(mad.madId).get().then(function (doc) {
+function initFridge() {
+  _userRef.doc(_currentUser.uid).collection('fridge').onSnapshot(function (fridgeData) {
+    let htmlTemplate = "";
+    if (fridgeData.docs.length === 0) {
+      document.querySelector('#madvarer-container').innerHTML = "<br><br><br><br><p>Tilføj ting til dit køleskab</p> <img src='images/favicon.png'>";
+    }
+    fridgeData.forEach(async function (doc) {
+      let fridgeDoc = doc.data();
+      fridgeDoc.id = doc.id
+      await _madRef.doc(fridgeDoc.madId).get().then(function (doc) {
         let madData = doc.data();
         madData.id = doc.id;
         htmlTemplate += `
-        <article class="madvarer">
-          <div id="${madData.id}" class="madAppended ${foodStatus(mad.ExpireDate)}" onclick="appendDeleteBtn('${madData.title}')">
-            <h4>${madData.title}</h4>
-            <img src="${madData.img}">
-          </div>
+          <article class="madvarer">
+            <div id="${madData.id}" class="madAppended ${foodStatus(fridgeDoc.ExpireDate)}" onclick="appendDeleteBtn('${madData.title}')">
+              <h4>${madData.title}</h4>
+              <img src="${madData.img}">
+            </div>
+          </article>
+          <article class="${madData.title} add-dato deletebtn" style="display:none;">
+          <img src="images/skraldespand.svg" onclick="removeFromFridge('${fridgeDoc.id}')" alt="slet-knap">
         </article>
-        <article class="${madData.title} add-dato deletebtn" style="display:none;">
-        ${generateDeleteButton(mad)}
-      </article>
-      `;
+        `;
       });
-
-    }
-  }
-  document.querySelector('#madvarer-container').innerHTML = htmlTemplate;
-  //foodStatus(madId);
+      document.querySelector('#madvarer-container').innerHTML = htmlTemplate;
+    });
+  });
 }
 
 
 function generateDeleteButton(mad) {
-  let btnTemplate = "";
-  if (_currentUser.Fridge && _currentUser.Fridge.includes(mad)) {
-    btnTemplate = `
-    <img src="images/skraldespand.svg" onclick="addedToFridge('${mad.madId}, ${mad.ExpireDate}')" alt="slet-knap">`;
-  }
-  return btnTemplate;
+  console.log(mad);
+
+  return `<img src="images/skraldespand.svg" onclick="removeFromFridge('${mad.id}')" alt="slet-knap">`;
 }
 
 
@@ -293,17 +285,15 @@ function foodStatus(value, madId) {
 
   //let madStatus = document.querySelector(`#${madId}`);
 
-   if (udløbsdato<=0){
+  if (udløbsdato <= 0) {
     console.log("Udløbet")
     return "udløbet";
-   }
-   else if (udløbsdato<3) {
+  } else if (udløbsdato < 3) {
     console.log("Udløber snart")
     return "udløber";
-   }
-   else {
+  } else {
     console.log("Frisk")
     return "frisk";
-   }
-
   }
+
+}

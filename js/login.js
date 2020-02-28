@@ -181,21 +181,18 @@ window.addToFridge = function (madId) {
 
 function addToFridge(madId) {
   //showLoader(true);
-
-  // Array med madID til Firestore Database
   _userRef.doc(_currentUser.uid).collection('fridge').add({
     madId,
     ExpireDate
   });
 }
 
-
 window.removeFromFridge = function (id) {
   removeFromFridge(id);
 }
 
 function removeFromFridge(id) {
-  _userRef.doc(_currentUser.uid).collection('fridge/').doc(id).delete();
+  _userRef.doc(_currentUser.uid).collection('fridge').doc(id).delete();
 }
 
 // onclick funktion på save-knappen under profil siden.
